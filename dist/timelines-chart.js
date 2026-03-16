@@ -2174,8 +2174,8 @@
   // significant digits p, where x is positive and p is in [1, 21] or undefined.
   // For example, formatDecimalParts(1.23) returns ["123", 0].
   function formatDecimalParts(x, p) {
-    if ((i = (x = p ? x.toExponential(p - 1) : x.toExponential()).indexOf("e")) < 0) return null; // NaN, ±Infinity
-    var i, coefficient = x.slice(0, i);
+    if (!isFinite(x) || x === 0) return null; // NaN, ±Infinity, ±0
+    var i = (x = p ? x.toExponential(p - 1) : x.toExponential()).indexOf("e"), coefficient = x.slice(0, i);
 
     // The string returned by toExponential either has the form \d\.\d+e[-+]\d+
     // (e.g., 1.2e+3) or the form \de[-+]\d+ (e.g., 1e+3).
@@ -2280,7 +2280,7 @@
 
   function formatPrefixAuto(x, p) {
     var d = formatDecimalParts(x, p);
-    if (!d) return x + "";
+    if (!d) return prefixExponent = undefined, x.toPrecision(p);
     var coefficient = d[0],
         exponent = d[1],
         i = exponent - (prefixExponent = Math.max(-8, Math.min(8, Math.floor(exponent / 3))) * 3) + 1,
@@ -2334,7 +2334,7 @@
         minus = locale.minus === undefined ? "−" : locale.minus + "",
         nan = locale.nan === undefined ? "NaN" : locale.nan + "";
 
-    function newFormat(specifier) {
+    function newFormat(specifier, options) {
       specifier = formatSpecifier(specifier);
 
       var fill = specifier.fill,
@@ -2359,8 +2359,8 @@
 
       // Compute the prefix and suffix.
       // For SI-prefix, the suffix is lazily computed.
-      var prefix = symbol === "$" ? currencyPrefix : symbol === "#" && /[boxX]/.test(type) ? "0" + type.toLowerCase() : "",
-          suffix = symbol === "$" ? currencySuffix : /[%p]/.test(type) ? percent : "";
+      var prefix = (options && options.prefix !== undefined ? options.prefix : "") + (symbol === "$" ? currencyPrefix : symbol === "#" && /[boxX]/.test(type) ? "0" + type.toLowerCase() : ""),
+          suffix = (symbol === "$" ? currencySuffix : /[%p]/.test(type) ? percent : "") + (options && options.suffix !== undefined ? options.suffix : "");
 
       // What format function should we use?
       // Is this an integer type?
@@ -2401,7 +2401,7 @@
 
           // Compute the prefix and suffix.
           valuePrefix = (valueNegative ? (sign === "(" ? sign : minus) : sign === "-" || sign === "(" ? "" : sign) + valuePrefix;
-          valueSuffix = (type === "s" ? prefixes[8 + prefixExponent / 3] : "") + valueSuffix + (valueNegative && sign === "(" ? ")" : "");
+          valueSuffix = (type === "s" && !isNaN(value) && prefixExponent !== undefined ? prefixes[8 + prefixExponent / 3] : "") + valueSuffix + (valueNegative && sign === "(" ? ")" : "");
 
           // Break the formatted value into the integer “value” part that can be
           // grouped, and fractional or exponential “suffix” part that is not.
@@ -2446,12 +2446,11 @@
     }
 
     function formatPrefix(specifier, value) {
-      var f = newFormat((specifier = formatSpecifier(specifier), specifier.type = "f", specifier)),
-          e = Math.max(-8, Math.min(8, Math.floor(exponent(value) / 3))) * 3,
+      var e = Math.max(-8, Math.min(8, Math.floor(exponent(value) / 3))) * 3,
           k = Math.pow(10, -e),
-          prefix = prefixes[8 + e / 3];
+          f = newFormat((specifier = formatSpecifier(specifier), specifier.type = "f", specifier), {suffix: prefixes[8 + e / 3]});
       return function(value) {
-        return f(k * value) + prefix;
+        return f(k * value);
       };
     }
 
@@ -9749,6 +9748,112 @@
       },
       refresh: function refresh(state) {
         state._rerender();
+        return this;
+      },
+      destroy: function destroy(state) {
+        try {
+          // 1. Remove all window-level event listeners
+          d3Select(window).on('mousemove.zoomRect', null).on('mouseup.zoomRect', null);
+
+          // 2. Remove all SVG event listeners
+          if (state.svg) {
+            state.svg.on('zoom', null);
+            state.svg.on('zoomScent', null);
+            state.svg.on('resetZoom', null);
+
+            // Stop all running transitions
+            state.svg.selectAll('*').interrupt();
+
+            // Remove segment event listeners
+            state.svg.selectAll('.series-segment').on('mouseover.groupTooltip', null).on('mouseout.groupTooltip', null).on('mouseover.lineTooltip', null).on('mouseout.lineTooltip', null).on('mouseover.segmentTooltip', null).on('mouseout.segmentTooltip', null).on('mouseover', null).on('mouseout', null).on('click', null);
+
+            // Remove axis click handlers
+            state.svg.selectAll('g.y-axis,g.grp-axis').selectAll('text').on('click', null);
+          }
+
+          // 3. Remove graph event listeners
+          if (state.graph) {
+            state.graph.on('mousedown', null);
+          }
+
+          // 4. Destroy tooltips (they attach to DOM)
+          if (state.groupTooltip) {
+            try {
+              state.groupTooltip.destroy();
+            } catch (e) {
+              console.error("Error destroying groupTooltip:", e);
+            }
+            state.groupTooltip = null;
+          }
+          if (state.lineTooltip) {
+            try {
+              state.lineTooltip.destroy();
+            } catch (e) {
+              console.error("Error destroying lineTooltip:", e);
+            }
+            state.lineTooltip = null;
+          }
+          if (state.segmentTooltip) {
+            try {
+              state.segmentTooltip.destroy();
+            } catch (e) {
+              console.error("Error destroying segmentTooltip:", e);
+            }
+            state.segmentTooltip = null;
+          }
+
+          // 5. Clean up overview area
+          if (state.overviewArea && state.overviewAreaElem) {
+            state.overviewAreaElem.selectAll('*').remove();
+            state.overviewArea = null;
+          }
+
+          // 6. Remove all SVG content
+          if (state.svg) {
+            state.svg.selectAll('*').remove();
+          }
+
+          // 7. Clear all data arrays to release memory
+          state.completeStructData = [];
+          state.completeFlatData = [];
+          state.structData = [];
+          state.flatData = [];
+
+          // 8. Nullify all scales
+          state.yScale = null;
+          state.grpScale = null;
+          state.xScale = null;
+          state.zColorScale = null;
+
+          // 9. Nullify all axes
+          state.xAxis = null;
+          state.xGrid = null;
+          state.yAxis = null;
+          state.grpAxis = null;
+
+          // 10. Nullify DOM element references
+          state.dateMarkerLine = null;
+          state.resetBtn = null;
+          state.colorLegend = null;
+          state.graph = null;
+          state.svg = null;
+          state.overviewAreaElem = null;
+
+          // 11. Clear callback references to break circular dependencies
+          state.onZoom = null;
+          state.onLabelClick = null;
+          state.onSegmentClick = null;
+          state.segmentTooltipContent = null;
+
+          // 12. Clear comparison functions
+          state.labelCmpFunction = null;
+          state.grpCmpFunction = null;
+
+          // 13. Clear gradient ID
+          state.groupGradId = null;
+        } catch (e) {
+          console.error("Error during timelines-chart destroy:", e);
+        }
         return this;
       }
     },

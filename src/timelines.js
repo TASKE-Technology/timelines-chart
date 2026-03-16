@@ -291,6 +291,126 @@ export default Kapsule({
     refresh(state) {
       state._rerender();
       return this;
+    },
+	destroy(state) {
+		try {
+			// 1. Remove all window-level event listeners
+			d3Select(window).on('mousemove.zoomRect', null).on('mouseup.zoomRect', null);
+
+			// 2. Remove all SVG event listeners
+			if (state.svg) {
+				state.svg.on('zoom', null);
+				state.svg.on('zoomScent', null);
+				state.svg.on('resetZoom', null);
+
+				// Stop all running transitions
+				state.svg.selectAll('*').interrupt();
+
+				// Remove segment event listeners
+				state.svg.selectAll('.series-segment')
+					.on('mouseover.groupTooltip', null)
+					.on('mouseout.groupTooltip', null)
+					.on('mouseover.lineTooltip', null)
+					.on('mouseout.lineTooltip', null)
+					.on('mouseover.segmentTooltip', null)
+					.on('mouseout.segmentTooltip', null)
+					.on('mouseover', null)
+					.on('mouseout', null)
+					.on('click', null);
+
+				// Remove axis click handlers
+				state.svg.selectAll('g.y-axis,g.grp-axis').selectAll('text')
+					.on('click', null);
+			}
+
+			// 3. Remove graph event listeners
+			if (state.graph) {
+				state.graph.on('mousedown', null);
+			}
+
+			// 4. Destroy tooltips (they attach to DOM)
+			if (state.groupTooltip) {
+				try {
+					state.groupTooltip.destroy();
+				} catch (e) {
+					console.error("Error destroying groupTooltip:", e);
+				}
+				state.groupTooltip = null;
+			}
+
+			if (state.lineTooltip) {
+				try {
+					state.lineTooltip.destroy();
+				} catch (e) {
+					console.error("Error destroying lineTooltip:", e);
+				}
+				state.lineTooltip = null;
+			}
+
+			if (state.segmentTooltip) {
+				try {
+					state.segmentTooltip.destroy();
+				} catch (e) {
+					console.error("Error destroying segmentTooltip:", e);
+				}
+				state.segmentTooltip = null;
+			}
+
+			// 5. Clean up overview area
+			if (state.overviewArea && state.overviewAreaElem) {
+				state.overviewAreaElem.selectAll('*').remove();
+				state.overviewArea = null;
+			}
+
+			// 6. Remove all SVG content
+			if (state.svg) {
+				state.svg.selectAll('*').remove();
+			}
+
+			// 7. Clear all data arrays to release memory
+			state.completeStructData = [];
+			state.completeFlatData = [];
+			state.structData = [];
+			state.flatData = [];
+
+			// 8. Nullify all scales
+			state.yScale = null;
+			state.grpScale = null;
+			state.xScale = null;
+			state.zColorScale = null;
+
+			// 9. Nullify all axes
+			state.xAxis = null;
+			state.xGrid = null;
+			state.yAxis = null;
+			state.grpAxis = null;
+
+			// 10. Nullify DOM element references
+			state.dateMarkerLine = null;
+			state.resetBtn = null;
+			state.colorLegend = null;
+			state.graph = null;
+			state.svg = null;
+			state.overviewAreaElem = null;
+
+			// 11. Clear callback references to break circular dependencies
+			state.onZoom = null;
+			state.onLabelClick = null;
+			state.onSegmentClick = null;
+			state.segmentTooltipContent = null;
+
+			// 12. Clear comparison functions
+			state.labelCmpFunction = null;
+			state.grpCmpFunction = null;
+
+			// 13. Clear gradient ID
+			state.groupGradId = null;
+
+		} catch (e) {
+			console.error("Error during timelines-chart destroy:", e);
+		}
+
+		return this;
     }
   },
 
