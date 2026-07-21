@@ -1145,7 +1145,7 @@ export default Kapsule({
           if ('disableHover' in state && state.disableHover)
             return;
 
-          MoveToFront()(this);
+          this.nextElementSibling && MoveToFront()(this);
 
           const hoverEnlarge = state.lineHeight*hoverEnlargeRatio;
 
